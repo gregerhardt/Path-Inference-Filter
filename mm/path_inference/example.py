@@ -76,6 +76,15 @@ num_observations = 1
 """ Generation of some synthetic observations on this road network, and some
 travel times between the observations.
 """
+# NOTES (gde): 
+#
+# There will be one observation for each GPS point on a trip.  Here they are 
+# being synthetically generated, but normally we would get them by using
+# the PointProjector, which needs to be implemented.  The observation includes
+# the GPS position, and a set of candidate states.  
+#
+# The observed_travel_times are the times between recorded GPS points.
+# They are based on the number of points - 1. 
 (observations, observed_travel_times) = \
   create_trajectory_for_lattice_network(lattice_size, lattice_link_length, 
                                         sigma, obs_sigma, num_observations, 
@@ -103,17 +112,46 @@ import numpy as np
 
 path_builder = LatticePathBuilder()
 
+
 def distance(gps1, gps2):
   """ Distance between two gps points, defined as the Cartesian measure of the
   coordinates.
   """
   return math.sqrt((gps1.lat-gps2.lat)**2 + (gps1.lng-gps2.lng)**2)
 
+# NOTES (gde): 
+#
+# This is used as a scoring function, where each possible state is given
+# a score based on the distance from that state to the recorded GPS
+# position.  It is a maximization problem, so the score must be negative. 
+# 
+# It returns an array with two elements, the first element being the
+# pathscore and the second being the pointscore.  Since this is for points, 
+# the pathscore is always zero.  
 def point_feature_vector(sc):
   """ The feature vector of a point.
   """
   return [[0, -0.5 * distance(sc.gps_pos, s.gps_pos)] for s in sc.states]
 
+# NOTES (gde): 
+#
+# This is used as a scoring function, where the path is given a score
+# based on the square of the difference in travel time calculated from 
+# the links versus between the GPS recordings. It is a maximization problem, 
+# so the score must be negative. 
+# 
+# It returns an array with two elements, the first element being the
+# pathscore and the second being the pointscore.  Since this is for paths, 
+# the pointscore is always zero.  
+# 
+# Why should we prefer paths that are close to the GPS travel time, rather
+# paths with the lowest travel time?  This requires reliable link travel times.
+# If the link travel times are free-flow, for example, it may result in 
+# more circuitous paths being rewarded in order to come close to the GPS
+# travel time.
+#
+# Either way, this function is specific to the dummy network, so 
+# needs to be implemented for the actual network being used.  
 def path_feature_vector(path, tt):
   """ The feature vector of a path.
   """
@@ -132,13 +170,37 @@ def path_feature_vector(path, tt):
   return [-0.5 * ((m - tt) ** 2) / var, 0]
 
 """ The final list of lists of feature vectors."""
+# NOTES (gde): 
+#
+# point_feature_vector contains [pathscore, pointscore] for each 
+# candidate state.  
+# 
+# path_feature_vector contains [pathscore, pointscore] for each 
+# candidate path. 
+# 
+# In total, the features are an alternating sequence of points and paths, 
+# starting and ending with points. 
 features = []
+
 """ The transitions between the elements. """
+# NOTES (gde): 
+#
+# The transitions go between each element (point or path) in the trajectory, 
+# so there are len(features) - 1 transitions.  
+# For points, a transition is (index of candidate state, index of candidate path)
+# For paths, a transition is (index of candidate path, index of candidate state)
 transitions = []
+
 features.append(point_feature_vector(observations[0]))
+# NOTES (gde): for every "space" between two observations
 for (sc1, sc2, tt_) in zip(observations[:-1], observations[1:], 
                           observed_travel_times):
+                          
+  # NOTES (gde): look at every possible pair of states, and get a set
+  # of candidate paths between each, along with the transitions.                         
   (trans1, ps, trans2) = path_builder.getPathsBetweenCollections(sc1, sc2)
+  
+  # NOTES (gde): fill up the data structures used by the algoritms
   transitions.append(trans1)
   paths_features = []
   for path_ in ps:
@@ -149,6 +211,11 @@ for (sc1, sc2, tt_) in zip(observations[:-1], observations[1:],
 
 """ We can build a trajectory.
 """
+# NOTES (gde): 
+#
+# a LearningTrajectory is the basic data structure that stores the 
+# features (scores candidate states candidate paths), and transitions 
+# (indices to look up those states or paths).  
 traj = LearningTrajectory(features, transitions)
 
 """ *** Running filters ***
@@ -159,8 +226,21 @@ traj = LearningTrajectory(features, transitions)
 Note: these weights have not be tuned in any way and are here for
 demonstration only.
 """
+# NOTES (gde): 
+#
+# theta determines the relative weights of the pathscores versus 
+# the pointscores.  What are recommended values?
+# Also beware of units!
 theta = np.array([1, 1])
+
 """ Viterbi filter (most likely elements) """
+# NOTES (gde): 
+#
+# The viterbi is a specific algorithm that calculates the most likely
+# states and most likley paths.  The key output are the indices noted 
+# below, which can be used to look up the specific candidate states
+# and candidate paths (although those must be stored externally.  
+# There is one index for each feature. 
 viterbi = TrajectoryViterbi1(traj, theta)
 viterbi.computeAssignments()
 # The indexes of the most likely elements of the trajectory
@@ -168,6 +248,10 @@ viterbi.computeAssignments()
 most_likely_indexes = viterbi.assignments
 
 """ Alpha-beta smoother (distributions) """
+# NOTES (gde): 
+#
+# The smoother is a different algorithm that gives probabilities instead
+# of the most likley.  
 smoother = TrajectorySmoother1(traj, theta)
 smoother.computeProbabilities()
 probabilities = smoother.probabilities
