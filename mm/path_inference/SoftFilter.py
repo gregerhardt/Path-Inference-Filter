@@ -17,7 +17,7 @@ Created on Nov 27, 2011
 
 @author: tjhunter
 '''
-from mm.path_inference.HardFilter import HardFilter
+from path_inference.HardFilter import HardFilter
 
 class SoftFilter(HardFilter):
   """ Interface for a filter that performs soft assignments (probability
