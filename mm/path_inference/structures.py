@@ -18,15 +18,15 @@ Created on Sep 16, 2011
 @author: tjhunter
 '''
 
-class LatLng(object):
+class Position(object):
   """ A geolocation representation.
   """
-  def __init__(self, lat, lng):
-    self.lat = lat
-    self.lng = lng
+  def __init__(self, x, y):
+    self.x = x
+    self.y = y
 
   def __eq__(self, other):
-    return self.lat == other.lat and self.lng == other.lng
+    return self.x == other.x and self.y == other.y
 
   def __ne__(self, other):
     return not self.__eq__(other)
@@ -35,20 +35,25 @@ class LatLng(object):
 class State(object):
   """ A state on the road network.
   """
-  def __init__(self, link_id, offset, pos=None):
+  def __init__(self, link_id, offset, pos=None, distFromGPS=None):
     """ 
      - link_id: a string for identifying the link.
-     - offset: an offset on the link
-     - pos: a LatLnt position
+     - offset: an offset on the link, in the same units
+               as the coordinate system
+     - pos: an xy position
+     - distFromGPS: the distance between this projected state and
+                    the recorded gps position
     """
     self.link_id = link_id
     self.offset = offset
     self.gps_pos = pos
+    self.distFromGPS = distFromGPS
 
   def __eq__(self, other):
     return self.link_id == other.link_id \
       and self.offset == other.offset \
-      and self.gps_pos == other.gps_pos
+      and self.gps_pos == other.gps_pos \
+      and self.distFromGPS == other.distFromGPS
 
   def __ne__(self, other):
     return not self.__eq__(other)
@@ -59,7 +64,7 @@ class State(object):
 class StateCollection(object):
   """
     id: a string identifier of the driver
-    spots: a list of State objects.
+    states: a list of State objects.
     gps_pos: the LatLng gps observation.
     time: a DateTime object
   """
@@ -83,18 +88,21 @@ class Path(object):
   start_state: the start state
   end_state: the end state
   links: a sequence of link ids
-  states: a list of states (optional, for drawing only)
+  positions: a list of states (optional, for drawing only)
   """
-  def __init__(self, start_state, links, end_state, latlngs=None):
+  def __init__(self, start_state, links, end_state, positions=None):
     self.start = start_state
     self.end = end_state
     self.links = links
-    self.latlngs = latlngs
+    self.positions = positions
 
   def __eq__(self, other):
-    return self.start == other.start \
-      and self.end == other.end \
-      and self.links == other.links
+    if (other==None):
+        return False
+    else: 
+        return self.start == other.start \
+        and self.end == other.end \
+        and self.links == other.links
 
   def __ne__(self, other):
     return not self.__eq__(other)
